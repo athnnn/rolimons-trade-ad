@@ -49,164 +49,33 @@ async function getInv() {
   .catch(err => console.log(err));
 }
 
-// Generate possible trade ads
-function findValidPairs(items, min, max) {
-  const validPairs = [];
-  for (let i = 0; i < items.length; i++) {
-    for (let j = i + 1; j < items.length; j++) {
-      const sum = items[i].value + items[j].value;
-      if (sum > min && sum < max) {
-        validPairs.push([items[i], items[j]]);
-      }
-    }
-  }
-  return validPairs;
-}
-
-// Decide what items to put in the ad
+// Function to decide what items to put in the ad
 function generateAd() {
   let availableItems = [];
   for (const asset in playerInv) {
     for (const uaid of playerInv[asset]) {
-      if (!onHold.includes(uaid) && itemValues[asset].value >= config.minItemValue && config.maxItemValue >= itemValues[asset].value && !config.sendBlacklist.includes(`${asset}`)) {
+      if (!onHold.includes(uaid) && itemValues[asset] && itemValues[asset].value >= config.minItemValue && config.maxItemValue >= itemValues[asset].value && !config.sendBlacklist.includes(`${asset}`)) {
         availableItems.push(asset);
       }
     }
   }
 
-  let sendingSideNum = Math.floor(Math.random() * (config.maxItemsSend - config.minItemsSend + 1)) + config.minItemsSend;
-  let sendingSide = [];
-  for (let i = 0; i < sendingSideNum; i++) {
-    let item = availableItems[Math.floor(Math.random() * availableItems.length)];
-    sendingSide.push(parseFloat(item));
-    availableItems.splice(availableItems.indexOf(item), 1);
-  }
+  // Manually specified items
+  let sendingSide = config.manualItems;
 
-  if (config.smartAlgo) {
-    let receivingSide = [];
-    let totalSendValue = 0;
-    for (const item of sendingSide) {
-      totalSendValue = totalSendValue + itemValues[item].value;
-    }
-    let upgOrDown = Math.floor(Math.random() * 2);
-    if (upgOrDown == 1) {
-      let requestValue = totalSendValue * (1 - config.RequestPercent / 100);
-      let options = [];
-      for (const item in itemValues) {
-        if (itemValues[item].value >= requestValue && itemValues[item].value <= totalSendValue && itemValues[item].type >= config.minDemand && !sendingSide.includes(parseFloat(item))) {
-          options.push(item);
-        }
-      }
-      if (options.length >= 1) {
-        let item = options[Math.floor(Math.random(options.length))];
-        receivingSide.push(parseFloat(item));
-        receivingSide.push("upgrade");
-        receivingSide.push("adds");
-        postAd(sendingSide, receivingSide);
-      } else {
-        receivingSide.push("adds");
-        let itemIdValArr = [];
-        for (const item in itemValues) {
-          if (itemValues[item].type >= config.minDemand) {
-            itemIdValArr.push({ id: item, value: itemValues[item].value });
-          }
-        }
-        let validPairs = findValidPairs(itemIdValArr, totalSendValue * (1 - config.RequestPercent / 100), totalSendValue);
-        if (validPairs.length > 0) {
-          const randomPair = validPairs[Math.floor(Math.random() * validPairs.length)];
-          const ids = randomPair.map(item => item.id);
-          for (const id of ids) {
-            receivingSide.push(parseFloat(id));
-          }
-          let maxRValue = 0, maxSValue = 0;
-          for (const item of receivingSide) {
-            if (typeof item === 'number' && parseFloat(itemValues[`${item}`].value) > maxRValue) {
-              maxRValue = itemValues[`${item}`].value;
-            }
-          }
-          for (const item of sendingSide) {
-            if (typeof item === 'number' && parseFloat(itemValues[`${item}`].value) > maxSValue) {
-              maxSValue = itemValues[`${item}`].value;
-            }
-          }
-          if (maxSValue < maxRValue) {
-            receivingSide.push("upgrade");
-          } else {
-            receivingSide.push("downgrade");
-          }
-          postAd(sendingSide, receivingSide);
-        } else {
-          generateAd();
-        }
-      }
-    } else {
-      receivingSide.push("adds");
-      let itemIdValArr = [];
-      for (const item in itemValues) {
-        if (itemValues[item].type >= config.minDemand) {
-          itemIdValArr.push({ id: item, value: itemValues[item].value });
-        }
-      }
-      let validPairs = findValidPairs(itemIdValArr, totalSendValue * (1 - config.RequestPercent / 100), totalSendValue);
-      if (validPairs.length > 0) {
-        const randomPair = validPairs[Math.floor(Math.random() * validPairs.length)];
-        const ids = randomPair.map(item => item.id);
-        for (const id of ids) {
-          receivingSide.push(parseFloat(id));
-        }
-        let maxRValue = 0, maxSValue = 0;
-        for (const item of receivingSide) {
-          if (typeof item === 'number' && parseFloat(itemValues[`${item}`].value) > maxRValue) {
-            maxRValue = itemValues[`${item}`].value;
-          }
-        }
-        for (const item of sendingSide) {
-          if (typeof item === 'number' && parseFloat(itemValues[`${item}`].value) > maxSValue) {
-            maxSValue = itemValues[`${item}`].value;
-          }
-        }
-        if (maxSValue < maxRValue) {
-          receivingSide.push("upgrade");
-        } else {
-          receivingSide.push("downgrade");
-        }
-        postAd(sendingSide, receivingSide);
-      } else {
-        generateAd();
-      }
-    }
-  } else {
-    // Adding manual item selection
-    let manualItems = config.manualItems; // Add an array of manual items in your config.json
-    postAd(sendingSide, manualItems);
-  }
+  // Post the ad
+  postAd(sendingSide);
 }
 
-// Post the trade ad
-async function postAd(sending, receiving) {
-  let allRTags = [], allRIds = [];
-  for (const tag of receiving) {
-    if (typeof tag === "string") {
-      allRTags.push(tag);
-    } else if (typeof tag === "number") {
-      allRIds.push(tag);
-    }
-  }
-
-  let seenStrings = new Set();
-  const result = allRTags.filter(item => {
-    if (typeof item === 'string' && seenStrings.has(item)) {
-      return false;
-    }
-    seenStrings.add(item);
-    return true;
-  });
+// Function to post the trade ad
+async function postAd(sending) {
+  let allRTags = config.requestTags || [];
 
   let reqBody = {
     "player_id": parseFloat(robloxId),
     "offer_item_ids": sending,
-    "request_item_ids": allRIds,
-    "request_tags": result
+    "request_item_ids": [],
+    "request_tags": allRTags
   };
 
   fetch(`https://api.rolimons.com/tradeads/v1/createad`, {
