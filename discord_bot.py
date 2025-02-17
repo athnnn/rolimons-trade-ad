@@ -153,7 +153,7 @@ def save_config():
 def post_trade_ad():
     offer_item_ids = config['manualItems']
     request_item_ids = config['requestItems']
-    offer_robux = config.get('offerRobux', 10000)  # Use the updated Robux amount or default to 10000
+    offer_robux = config.get('offerRobux', 0)  # Use the updated Robux amount or default to 0
     
     reqBody = {
         "player_id": int(ROBLOX_ID),
