@@ -127,17 +127,20 @@ async def update_request_tags(interaction: discord.Interaction, tags: str):
 # Command to list current items in both offer and request sides
 @tree.command(name="list_items", description="List current items in the trade ad list")
 async def list_items(interaction: discord.Interaction):
+    response_message = ""
     if config['manualItems']:
         offer_item_names = [get_item_name(item_id) for item_id in config['manualItems']]
-        await interaction.response.send_message(f'Offer items: {", ".join(offer_item_names)}')
+        response_message += f'Offer items: {", ".join(offer_item_names)}\n'
     else:
-        await interaction.response.send_message('No offer items currently in the list.')
+        response_message += 'No offer items currently in the list.\n'
     
     if config['requestItems']:
         request_item_names = [get_item_name(item_id) for item_id in config['requestItems']]
-        await interaction.response.send_message(f'Request items: {", ".join(request_item_names)}')
+        response_message += f'Request items: {", ".join(request_item_names)}'
     else:
-        await interaction.response.send_message('No request items currently in the list.')
+        response_message += 'No request items currently in the list.'
+
+    await interaction.response.send_message(response_message)
 
 # Command to update the offered Robux amount
 @tree.command(name="update_offered_robux", description="Update the amount of Robux offered in the trade ad")
@@ -166,12 +169,13 @@ def post_trade_ad():
     offer_robux = config.get('offerRobux', 10000)  # Use the updated Robux amount or default to 10000
     
     reqBody = {
-        "player_id": int(ROBLOX_ID),
-        "offer_item_ids": offer_item_ids,
-        "request_item_ids": request_item_ids,
-        "request_tags": config['requestTags'],
-        "offer_robux": offer_robux
+        "manualItems": offer_item_ids,
+        "requestItems": request_item_ids,
+        "requestTags": config['requestTags'],
+        "offerRobux": offer_robux
     }
+
+    print("Request Body:", json.dumps(reqBody, indent=2))  # Log the request body for debugging
 
     # Call the ad posting endpoint
     response = requests.post(ROLIMONS_TRADE_AD_URL, json=reqBody)
