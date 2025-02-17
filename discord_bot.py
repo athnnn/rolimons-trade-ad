@@ -12,11 +12,21 @@ tree = bot.tree
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 ROLIMONS_API_KEY = os.getenv('ROLIMONS_API_KEY')
 ROBLOX_ID = os.getenv('ROBLOX_USER_ID')
-ROLIMONS_TRADE_AD_URL = 'https://api.rolimons.com/tradeads/v1/createad'
+ROLIMONS_TRADE_AD_URL = 'http://localhost:8080/create-ad'
 
 # Load configuration
 with open('config.json') as f:
     config = json.load(f)
+
+# Ensure all necessary keys are in the config
+if 'manualItems' not in config:
+    config['manualItems'] = []
+if 'requestItems' not in config:
+    config['requestItems'] = []
+if 'requestTags' not in config:
+    config['requestTags'] = []
+if 'offerRobux' not in config:
+    config['offerRobux'] = 10000
 
 # Check if the item is valid and owned by the user
 def is_valid_item(item_id):
@@ -153,7 +163,7 @@ def save_config():
 def post_trade_ad():
     offer_item_ids = config['manualItems']
     request_item_ids = config['requestItems']
-    offer_robux = config.get('offerRobux', 0)  # Use the updated Robux amount or default to 0
+    offer_robux = config.get('offerRobux', 10000)  # Use the updated Robux amount or default to 10000
     
     reqBody = {
         "player_id": int(ROBLOX_ID),
@@ -163,7 +173,8 @@ def post_trade_ad():
         "offer_robux": offer_robux
     }
 
-    response = requests.post(ROLIMONS_TRADE_AD_URL, json=reqBody, headers={"Content-Type": "application/json", "cookie": ROLIMONS_API_KEY})
+    # Call the ad posting endpoint
+    response = requests.post(ROLIMONS_TRADE_AD_URL, json=reqBody)
     response.raise_for_status()
     return response.json()
 
