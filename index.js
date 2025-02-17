@@ -1,178 +1,101 @@
-import discord
-from discord.ext import commands
-import requests
-import json
-import os
+var app = require("express")() // Hosting the API and putting it on uptimerobot
+app.use(require("body-parser").json())
 
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix='/', intents=intents)
-tree = bot.tree
+const dotenv = require('dotenv') // Reading secrets from env
+dotenv.config()
 
-TOKEN = os.getenv('DISCORD_BOT_TOKEN')
-ROLIMONS_TRADE_AD_URL = 'https://api.rolimons.com/tradeads/v1/createad'
-ROLIMONS_API_KEY = os.getenv('ROLIMONS_API_KEY')
-ROBLOX_ID = os.getenv('ROBLOX_USER_ID')
+const fetch = require("node-fetch");
 
-# Load configuration
-with open('config.json') as f:
-    config = json.load(f)
+const rolimonsToken = process.env.token // Rolimons verification token from environment
+const robloxId = process.env.robloxId // Roblox verification token from environment
+const config = require("./config.json"); // Your configuration
 
-# Check if the item is valid and owned by the user
-def is_valid_item(item_id):
-    response = requests.get('https://api.rolimons.com/items/v1/itemdetails')
-    response.raise_for_status()
-    items = response.json().get('items', {})
-    return str(item_id) in items and items[str(item_id)][0]
+let itemValues = {}; // Item values. Format: "itemId": {"value": "5", "type": "3"}
+let playerInv = {}; // Player current inventory
+let onHold = []; // Items on hold
 
-def get_item_name(item_id):
-    response = requests.get('https://api.rolimons.com/items/v1/itemdetails')
-    response.raise_for_status()
-    items = response.json().get('items', {})
-    return items[str(item_id)][0] if str(item_id) in items else None
-
-# Command to add items to the offer side
-@tree.command(name="add_item", description="Add an item to the offer side of the trade ad list")
-async def add_item(interaction: discord.Interaction, item_id: int):
-    if len(config['manualItems']) >= 4:
-        await interaction.response.send_message('You can only add up to 4 items.')
-        return
-    if not is_valid_item(item_id):
-        await interaction.response.send_message('Invalid item ID or you do not own this item.')
-        return
-    if item_id not in config['manualItems']:
-        config['manualItems'].append(item_id)
-        save_config()
-        item_name = get_item_name(item_id)
-        await interaction.response.send_message(f'Item {item_name} (ID: {item_id}) added successfully to the offer side!')
-    else:
-        await interaction.response.send_message(f'Item {item_name} (ID: {item_id}) is already in the list.')
-
-# Command to add items to the request side
-@tree.command(name="add_request_item", description="Add an item to the request side of the trade ad list")
-async def add_request_item(interaction: discord.Interaction, item_id: int):
-    if len(config['requestItems']) >= 4:
-        await interaction.response.send_message('You can only request up to 4 items.')
-        return
-    if not is_valid_item(item_id):
-        await interaction.response.send_message('Invalid item ID.')
-        return
-    if item_id not in config['requestItems']:
-        config['requestItems'].append(item_id)
-        save_config()
-        item_name = get_item_name(item_id)
-        await interaction.response.send_message(f'Item {item_name} (ID: {item_id}) added successfully to the request side!')
-    else:
-        await interaction.response.send_message(f'Item {item_name} (ID: {item_id}) is already in the list.')
-
-# Command to remove items
-@tree.command(name="remove_item", description="Remove an item from the trade ad list")
-async def remove_item(interaction: discord.Interaction, item_id: int):
-    if item_id in config['manualItems']:
-        config['manualItems'].remove(item_id)
-        save_config()
-        item_name = get_item_name(item_id)
-        await interaction.response.send_message(f'Item {item_name} (ID: {item_id}) removed successfully!')
-    else:
-        await interaction.response.send_message(f'Item {item_id} not found!')
-
-# Command to remove all items
-@tree.command(name="remove_all_items", description="Remove all items from the trade ad list")
-async def remove_all_items(interaction: discord.Interaction):
-    config['manualItems'].clear()
-    config['requestItems'].clear()
-    save_config()
-    await interaction.response.send_message('All items removed from both the offer and request sides of the trade ad list.')
-
-# Command to overwrite the current trade list with a new list
-@tree.command(name="overwrite_items", description="Overwrite the current trade list with a new list of items")
-async def overwrite_items(interaction: discord.Interaction, item_ids: str):
-    new_items = [int(item_id) for item_id in item_ids.split(',')]
-    if len(new_items) > 4:
-        await interaction.response.send_message('You can only add up to 4 items.')
-        return
-    for item_id in new_items:
-        if not is_valid_item(item_id):
-            await interaction.response.send_message(f'Invalid item ID: {item_id}')
-            return
-    config['manualItems'] = new_items
-    save_config()
-    item_names = [get_item_name(item_id) for item_id in config['manualItems']]
-    await interaction.response.send_message(f'Trade list overwritten with items: {", ".join(item_names)}')
-
-# Command to update request tags
-@tree.command(name="update_request_tags", description="Update the request tags in the config")
-async def update_request_tags(interaction: discord.Interaction, tags: str):
-    new_tags = tags.split(',')
-    config['requestTags'] = new_tags
-    save_config()
-    await interaction.response.send_message(f'Request tags updated to: {", ".join(new_tags)}')
-
-# Command to list current items in both offer and request sides
-@tree.command(name="list_items", description="List current items in the trade ad list")
-async def list_items(interaction: discord.Interaction):
-    if config['manualItems']:
-        offer_item_names = [get_item_name(item_id) for item_id in config['manualItems']]
-        await interaction.response.send_message(f'Offer items: {", ".join(offer_item_names)}')
-    else:
-        await interaction.response.send_message('No offer items currently in the list.')
-    
-    if config['requestItems']:
-        request_item_names = [get_item_name(item_id) for item_id in config['requestItems']]
-        await interaction.response.send_message(f'Request items: {", ".join(request_item_names)}')
-    else:
-        await interaction.response.send_message('No request items currently in the list.')
-
-# Command to update the offered Robux amount
-@tree.command(name="update_offered_robux", description="Update the amount of Robux offered in the trade ad")
-async def update_offered_robux(interaction: discord.Interaction, robux_amount: int):
-    config['offerRobux'] = robux_amount
-    save_config()
-    await interaction.response.send_message(f'Offered Robux amount updated to: {robux_amount}')
-
-# Save configuration to file
-def save_config():
-    with open('config.json', 'w') as f:
-        json.dump(config, f, indent=4)
-
-# Function to get item values
-def get_item_values():
-    response = requests.get('https://api.rolimons.com/items/v1/itemdetails')
-    response.raise_for_status()
-    items = response.json().get('items', {})
-    return {item_id: details[4] for item_id, details in items.items()}
-
-# Function to post the trade ad
-def post_trade_ad():
-    item_values = get_item_values()
-    offer_item_ids = config['manualItems']
-    request_item_ids = config['requestItems']
-    offer_robux = config.get('offerRobux', 10000)  # Use the updated Robux amount or default to 10000
-    
-    reqBody = {
-        "player_id": int(ROBLOX_ID),
-        "offer_item_ids": offer_item_ids,
-        "request_item_ids": request_item_ids,
-        "request_tags": config['requestTags'],
-        "offer_robux": offer_robux
+// Get item values from Rolimons
+async function getValues() {
+  await fetch(`https://api.rolimons.com/items/v1/itemdetails`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  })
+  .then(res => res.json())
+  .then(json => {
+    for (const item in json.items) {
+      let type = json.items[item][5] >= 0 ? json.items[item][5] : 0;
+      itemValues[item] = { value: Math.abs(json.items[item][4]), type: type }; // Assign item values and demand
     }
+    getInv();
+  })
+  .catch(err => console.log(err));
+}
 
-    response = requests.post(ROLIMONS_TRADE_AD_URL, json=reqBody, headers={"Content-Type": "application/json", "cookie": ROLIMONS_API_KEY})
-    response.raise_for_status()
-    return response.json()
+// Get user inventory and see items on hold
+async function getInv() {
+  await fetch(`https://api.rolimons.com/players/v1/playerassets/${robloxId}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0",
+    },
+  })
+  .then(res => res.json())
+  .then(json => {
+    playerInv = json.playerAssets; // Get player's inventory
+    onHold = json.holds; // Assign items on hold
+    generateAd();
+  })
+  .catch(err => console.log(err));
+}
 
-# Command to post trade ad
-@tree.command(name="post_ad", description="Post the trade ad")
-async def post_ad(interaction: discord.Interaction):
-    try:
-        result = post_trade_ad()
-        await interaction.response.send_message(f'Trade ad posted successfully! Response: {result}')
-    except requests.exceptions.RequestException as e:
-        await interaction.response.send_message(f'Failed to post trade ad: {e}')
+// Function to decide what items to put in the ad
+function generateAd() {
+  let availableItems = [];
+  for (const asset in playerInv) {
+    for (const uaid of playerInv[asset]) {
+      if (!onHold.includes(uaid) && itemValues[asset] && itemValues[asset].value >= config.minItemValue && config.maxItemValue >= itemValues[asset].value && !config.sendBlacklist.includes(`${asset}`)) {
+        availableItems.push(asset);
+      }
+    }
+  }
 
-@bot.event
-async def on_ready():
-    await tree.sync()
-    print(f'Logged in as {bot.user}')
+  // Manually specified items
+  let sendingSide = config.manualItems;
 
-bot.run(TOKEN)
+  // Post the ad
+  postAd(sendingSide);
+}
+
+// Function to post the trade ad
+async function postAd(sending) {
+  let allRTags = config.requestTags || [];
+
+  let reqBody = {
+    "player_id": parseFloat(robloxId),
+    "offer_item_ids": sending,
+    "request_item_ids": [],
+    "request_tags": allRTags
+  };
+
+  fetch(`https://api.rolimons.com/tradeads/v1/createad`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "cookie": `${rolimonsToken}`
+    },
+    body: JSON.stringify(reqBody),
+  })
+  .then(res => res.json())
+  .then(json => console.log(json))
+  .catch(err => console.log(err));
+
+  setTimeout(() => { getValues(); }, 1560000);
+}
+
+getValues(); // Start the script from here
+
+app.get("/", (req, res) => {
+  res.json({ message: 'Trade ad bot is up and running!' });
+})
+app.listen(8080)
