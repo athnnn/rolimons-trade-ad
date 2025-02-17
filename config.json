@@ -10,5 +10,7 @@
   "minDemand": 2,
   "_comment3": "0 = terrible, 1 = Low, 2 = Normal, 3 = High, 4 = Amazing",
   "manualItems": [],
-  "requestTags": []
+  "requestItems": [],
+  "requestTags": [],
+  "offerRobux": 0
 }
