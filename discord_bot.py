@@ -6,6 +6,7 @@ import os
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix='/', intents=intents)
+tree = bot.tree
 
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 ROLIMONS_TRADE_AD_URL = 'https://api.rolimons.com/tradeads/v1/createad'
@@ -17,32 +18,32 @@ with open('config.json') as f:
     config = json.load(f)
 
 # Command to add items
-@bot.slash_command(name="add_item", description="Add an item to the trade ad list")
-async def add_item(ctx, item_id: int):
+@tree.command(name="add_item", description="Add an item to the trade ad list")
+async def add_item(interaction: discord.Interaction, item_id: int):
     if item_id not in config['manualItems']:
         config['manualItems'].append(item_id)
         save_config()
-        await ctx.respond(f'Item {item_id} added successfully!')
+        await interaction.response.send_message(f'Item {item_id} added successfully!')
     else:
-        await ctx.respond(f'Item {item_id} is already in the list.')
+        await interaction.response.send_message(f'Item {item_id} is already in the list.')
 
 # Command to remove items
-@bot.slash_command(name="remove_item", description="Remove an item from the trade ad list")
-async def remove_item(ctx, item_id: int):
+@tree.command(name="remove_item", description="Remove an item from the trade ad list")
+async def remove_item(interaction: discord.Interaction, item_id: int):
     if item_id in config['manualItems']:
         config['manualItems'].remove(item_id)
         save_config()
-        await ctx.respond(f'Item {item_id} removed successfully!')
+        await interaction.response.send_message(f'Item {item_id} removed successfully!')
     else:
-        await ctx.respond(f'Item {item_id} not found!')
+        await interaction.response.send_message(f'Item {item_id} not found!')
 
 # Command to list current items
-@bot.slash_command(name="list_items", description="List current items in the trade ad list")
-async def list_items(ctx):
+@tree.command(name="list_items", description="List current items in the trade ad list")
+async def list_items(interaction: discord.Interaction):
     if config['manualItems']:
-        await ctx.respond(f'Current items: {", ".join(map(str, config["manualItems"]))}')
+        await interaction.response.send_message(f'Current items: {", ".join(map(str, config["manualItems"]))}')
     else:
-        await ctx.respond('No items currently in the list.')
+        await interaction.response.send_message('No items currently in the list.')
 
 # Save configuration to file
 def save_config():
@@ -75,12 +76,17 @@ def post_trade_ad():
     return response.json()
 
 # Command to post trade ad
-@bot.slash_command(name="post_ad", description="Post the trade ad")
-async def post_ad(ctx):
+@tree.command(name="post_ad", description="Post the trade ad")
+async def post_ad(interaction: discord.Interaction):
     try:
         result = post_trade_ad()
-        await ctx.respond(f'Trade ad posted successfully! Response: {result}')
+        await interaction.response.send_message(f'Trade ad posted successfully! Response: {result}')
     except requests.exceptions.RequestException as e:
-        await ctx.respond(f'Failed to post trade ad: {e}')
+        await interaction.response.send_message(f'Failed to post trade ad: {e}')
+
+@bot.event
+async def on_ready():
+    await tree.sync(guild=None)  # Sync commands globally
+    print(f'Logged in as {bot.user}')
 
 bot.run(TOKEN)
