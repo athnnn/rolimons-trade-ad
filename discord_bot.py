@@ -10,9 +10,9 @@ bot = commands.Bot(command_prefix='/', intents=intents)
 tree = bot.tree
 
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
-ROLIMONS_TRADE_AD_URL = 'https://api.rolimons.com/tradeads/v1/createad'
 ROLIMONS_API_KEY = os.getenv('ROLIMONS_API_KEY')
 ROBLOX_ID = os.getenv('ROBLOX_USER_ID')
+ROLIMONS_TRADE_AD_URL = 'https://api.rolimons.com/tradeads/v1/createad'
 
 # Load configuration
 with open('config.json') as f:
@@ -30,6 +30,12 @@ def get_item_name(item_id):
     response.raise_for_status()
     items = response.json().get('items', {})
     return items[str(item_id)][0] if str(item_id) in items else None
+
+# Get user inventory from Rolimons
+def get_user_inventory():
+    response = requests.get(f'https://api.rolimons.com/players/v1/playerassets/{ROBLOX_ID}')
+    response.raise_for_status()
+    return response.json().get('playerAssets', {})
 
 # Command to add items to the offer side
 @tree.command(name="add_item", description="Add an item to the offer side of the trade ad list")
@@ -130,21 +136,21 @@ async def update_offered_robux(interaction: discord.Interaction, robux_amount: i
     save_config()
     await interaction.response.send_message(f'Offered Robux amount updated to: {robux_amount}')
 
+# Command to suggest items to be added to the offer side
+@tree.command(name="suggest_items", description="Suggest items from your inventory to add to the offer side")
+async def suggest_items(interaction: discord.Interaction):
+    inventory = get_user_inventory()
+    suggested_items = [(item_id, get_item_name(item_id)) for item_id in inventory.keys() if is_valid_item(item_id)]
+    suggested_list = ', '.join([f'{name} (ID: {item_id})' for item_id, name in suggested_items])
+    await interaction.response.send_message(f'Suggested items to add: {suggested_list}')
+
 # Save configuration to file
 def save_config():
     with open('config.json', 'w') as f:
         json.dump(config, f, indent=4)
 
-# Function to get item values
-def get_item_values():
-    response = requests.get('https://api.rolimons.com/items/v1/itemdetails')
-    response.raise_for_status()
-    items = response.json().get('items', {})
-    return {item_id: details[4] for item_id, details in items.items()}
-
 # Function to post the trade ad
 def post_trade_ad():
-    item_values = get_item_values()
     offer_item_ids = config['manualItems']
     request_item_ids = config['requestItems']
     offer_robux = config.get('offerRobux', 10000)  # Use the updated Robux amount or default to 10000
