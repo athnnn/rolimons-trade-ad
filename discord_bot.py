@@ -10,7 +10,7 @@ bot = commands.Bot(command_prefix='/', intents=intents)
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 ROLIMONS_TRADE_AD_URL = 'https://api.rolimons.com/tradeads/v1/createad'
 ROLIMONS_API_KEY = os.getenv('ROLIMONS_API_KEY')
-ROBLOX_ID = os.getenv('ROBLOX_USER_ID'
+ROBLOX_ID = os.getenv('ROBLOX_USER_ID')
 
 # Load configuration
 with open('config.json') as f:
