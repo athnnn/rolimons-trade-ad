@@ -10,7 +10,7 @@
   "minDemand": 2,
   "_comment3": "0 = terrible, 1 = Low, 2 = Normal, 3 = High, 4 = Amazing",
   "manualItems": [327318670, 16477149823, 114706745345742, 1241181482],
-  "requestTags": ["upgrade", "downgrade", "demand", "any"]
-  "requestTags": [],
+  "requestItems": [],
+  "requestTags": ["upgrade", "downgrade", "demand", "any"],
   "offerRobux": 0
 }
