@@ -31,8 +31,8 @@ def get_item_name(item_id):
     items = response.json().get('items', {})
     return items[str(item_id)][0] if str(item_id) in items else None
 
-# Command to add items
-@tree.command(name="add_item", description="Add an item to the trade ad list")
+# Command to add items to the offer side
+@tree.command(name="add_item", description="Add an item to the offer side of the trade ad list")
 async def add_item(interaction: discord.Interaction, item_id: int):
     if len(config['manualItems']) >= 4:
         await interaction.response.send_message('You can only add up to 4 items.')
@@ -44,9 +44,26 @@ async def add_item(interaction: discord.Interaction, item_id: int):
         config['manualItems'].append(item_id)
         save_config()
         item_name = get_item_name(item_id)
-        await interaction.response.send_message(f'Item {item_name} (ID: {item_id}) added successfully!')
+        await interaction.response.send_message(f'Item {item_name} (ID: {item_id}) added successfully to the offer side!')
     else:
-        await interaction.response.send_message(f'Item (ID: {item_id}) is already in the list.')
+        await interaction.response.send_message(f'Item {item_name} (ID: {item_id}) is already in the list.')
+
+# Command to add items to the request side
+@tree.command(name="add_request_item", description="Add an item to the request side of the trade ad list")
+async def add_request_item(interaction: discord.Interaction, item_id: int):
+    if len(config['requestItems']) >= 4:
+        await interaction.response.send_message('You can only request up to 4 items.')
+        return
+    if not is_valid_item(item_id):
+        await interaction.response.send_message('Invalid item ID.')
+        return
+    if item_id not in config['requestItems']:
+        config['requestItems'].append(item_id)
+        save_config()
+        item_name = get_item_name(item_id)
+        await interaction.response.send_message(f'Item {item_name} (ID: {item_id}) added successfully to the request side!')
+    else:
+        await interaction.response.send_message(f'Item {item_name} (ID: {item_id}) is already in the list.')
 
 # Command to remove items
 @tree.command(name="remove_item", description="Remove an item from the trade ad list")
@@ -57,23 +74,15 @@ async def remove_item(interaction: discord.Interaction, item_id: int):
         item_name = get_item_name(item_id)
         await interaction.response.send_message(f'Item {item_name} (ID: {item_id}) removed successfully!')
     else:
-        await interaction.response.send_message(f'Item (ID: {item_id}) not found!')
-
-# Command to list current items
-@tree.command(name="list_items", description="List current items in the trade ad list")
-async def list_items(interaction: discord.Interaction):
-    if config['manualItems']:
-        item_names = [get_item_name(item_id) for item_id in config['manualItems']]
-        await interaction.response.send_message(f'Current items: {", ".join(item_names)}')
-    else:
-        await interaction.response.send_message('No items currently in the list.')
+        await interaction.response.send_message(f'Item {item_id} not found!')
 
 # Command to remove all items
 @tree.command(name="remove_all_items", description="Remove all items from the trade ad list")
 async def remove_all_items(interaction: discord.Interaction):
     config['manualItems'].clear()
+    config['requestItems'].clear()
     save_config()
-    await interaction.response.send_message('All items removed from the trade ad list.')
+    await interaction.response.send_message('All items removed from both the offer and request sides of the trade ad list.')
 
 # Command to overwrite the current trade list with a new list
 @tree.command(name="overwrite_items", description="Overwrite the current trade list with a new list of items")
@@ -99,6 +108,28 @@ async def update_request_tags(interaction: discord.Interaction, tags: str):
     save_config()
     await interaction.response.send_message(f'Request tags updated to: {", ".join(new_tags)}')
 
+# Command to list current items in both offer and request sides
+@tree.command(name="list_items", description="List current items in the trade ad list")
+async def list_items(interaction: discord.Interaction):
+    if config['manualItems']:
+        offer_item_names = [get_item_name(item_id) for item_id in config['manualItems']]
+        await interaction.response.send_message(f'Offer items: {", ".join(offer_item_names)}')
+    else:
+        await interaction.response.send_message('No offer items currently in the list.')
+    
+    if config['requestItems']:
+        request_item_names = [get_item_name(item_id) for item_id in config['requestItems']]
+        await interaction.response.send_message(f'Request items: {", ".join(request_item_names)}')
+    else:
+        await interaction.response.send_message('No request items currently in the list.')
+
+# Command to update the offered Robux amount
+@tree.command(name="update_offered_robux", description="Update the amount of Robux offered in the trade ad")
+async def update_offered_robux(interaction: discord.Interaction, robux_amount: int):
+    config['offerRobux'] = robux_amount
+    save_config()
+    await interaction.response.send_message(f'Offered Robux amount updated to: {robux_amount}')
+
 # Save configuration to file
 def save_config():
     with open('config.json', 'w') as f:
@@ -115,12 +146,13 @@ def get_item_values():
 def post_trade_ad():
     item_values = get_item_values()
     offer_item_ids = config['manualItems']
-    offer_robux = 10000  # Set the amount of Robux you want to offer
+    request_item_ids = config['requestItems']
+    offer_robux = config.get('offerRobux', 10000)  # Use the updated Robux amount or default to 10000
     
     reqBody = {
         "player_id": int(ROBLOX_ID),
         "offer_item_ids": offer_item_ids,
-        "request_item_ids": [],
+        "request_item_ids": request_item_ids,
         "request_tags": config['requestTags'],
         "offer_robux": offer_robux
     }
