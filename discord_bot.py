@@ -87,7 +87,7 @@ async def post_ad(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
-    await tree.sync()  # Sync commands globally
+    await tree.sync()
     print(f'Logged in as {bot.user}')
 
 bot.run(TOKEN)
