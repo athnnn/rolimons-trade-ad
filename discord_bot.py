@@ -5,6 +5,7 @@ import json
 import os
 
 intents = discord.Intents.default()
+intents.message_content = True
 bot = commands.Bot(command_prefix='/', intents=intents)
 tree = bot.tree
 
@@ -86,7 +87,7 @@ async def post_ad(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
-    await tree.sync(guild=None)  # Sync commands globally
+    await tree.sync()  # Sync commands globally
     print(f'Logged in as {bot.user}')
 
 bot.run(TOKEN)
