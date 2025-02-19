@@ -19,7 +19,7 @@ const commands = [
     description: 'Add items to the list',
     options: [{
       name: 'item',
-      type: 'STRING',
+      type: 3, // STRING
       description: 'Item to add',
       required: true,
       autocomplete: true
@@ -30,7 +30,7 @@ const commands = [
     description: 'Request items by tags',
     options: [{
       name: 'tag',
-      type: 'STRING',
+      type: 3, // STRING
       description: 'Tag to request',
       required: true
     }]
