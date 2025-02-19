@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
 const dotenv = require('dotenv');
 dotenv.config();
 const app = require("express")();
@@ -12,6 +12,53 @@ let playerInv = {}; //player current inv
 let itemValues = {}; //item values. Format is "itemId": {"value": "5", "type": "3"}
 let onHold = []; //items on hold
 
+// Register slash commands
+const commands = [
+  {
+    name: 'add',
+    description: 'Add items to the list',
+    options: [{
+      name: 'item',
+      type: 'STRING',
+      description: 'Item to add',
+      required: true,
+      autocomplete: true
+    }]
+  },
+  {
+    name: 'request',
+    description: 'Request items by tags',
+    options: [{
+      name: 'tag',
+      type: 'STRING',
+      description: 'Tag to request',
+      required: true
+    }]
+  },
+  {
+    name: 'reset',
+    description: 'Reset items and tags to default',
+  },
+  {
+    name: 'status',
+    description: 'Check the current configuration status',
+  }
+];
+
+const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_BOT_TOKEN);
+
+(async () => {
+  try {
+    await rest.put(
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+      { body: commands },
+    );
+    console.log('Successfully registered application commands.');
+  } catch (error) {
+    console.error(error);
+  }
+})();
+
 // Fetch item values from Rolimons
 async function getValues() {
   await fetch(`https://api.rolimons.com/items/v1/itemdetails`, {
@@ -22,7 +69,7 @@ async function getValues() {
   }).then((res) => res.json()).then((json) => {
     for (const item in json.items) {
       let type = json.items[item][5] >= 0 ? json.items[item][5] : 0;
-      itemValues[item] = { value: Math.abs(json.items[item][4]), type: type }; //assings the item values and demand
+      itemValues[item] = { value: Math.abs(json.items[item][4]), type: type }; //assigns the item values and demand
     }
     getInv();
   }).catch((err) => {
