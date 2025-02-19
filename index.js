@@ -1,8 +1,4 @@
-const { Client, Intents } = require('discord.js');
-const discordClient = new Client({ 
-  intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] 
-});
-
+const { Client, GatewayIntentBits } = require('discord.js');
 const dotenv = require('dotenv');
 dotenv.config();
 const app = require("express")();
@@ -12,58 +8,150 @@ const fs = require('fs');
 
 // Load config
 let config = require('./config.json');
+let playerInv = {}; //player current inv
+let itemValues = {}; //item values. Format is "itemId": {"value": "5", "type": "3"}
+let onHold = []; //items on hold
 
-// Discord Bot Setup
-discordClient.on('ready', () => {
-  console.log(`Logged in as ${discordClient.user.tag}!`);
-});
+// Fetch item values from Rolimons
+async function getValues() {
+  await fetch(`https://api.rolimons.com/items/v1/itemdetails`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  }).then((res) => res.json()).then((json) => {
+    for (const item in json.items) {
+      let type = json.items[item][5] >= 0 ? json.items[item][5] : 0;
+      itemValues[item] = { value: Math.abs(json.items[item][4]), type: type }; //assings the item values and demand
+    }
+    getInv();
+  }).catch((err) => {
+    console.log(err);
+  });
+}
 
-discordClient.on('messageCreate', async (message) => {
-  if (message.author.id !== process.env.DISCORD_USER_ID) return; // Restrict to your account
+// Fetch inventory from Rolimons
+async function getInv() {
+  await fetch(`https://api.rolimons.com/players/v1/playerassets/${process.env.ROBLOX_USER_ID}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    },
+  }).then((res) => res.json()).then((json) => {
+    playerInv = json.playerAssets; //gets the players inv
+    onHold = json.holds; //assigns these items on hold
+    generateAd();
+  }).catch((err) => {
+    console.log(err);
+  });
+}
 
-  // Update items to send
-  if (message.content.startsWith('!add')) {
-    const items = message.content.split(' ').slice(1).map(Number);
-    config.manualItems = [...new Set([...config.manualItems, ...items])]; // Avoid duplicates
-    saveConfig();
-    message.reply(`✅ Added items: ${items.join(', ')}. Current items: ${config.manualItems.join(', ')}`);
+// Get item names from inventory
+async function getItemNames() {
+  await getValues();
+  const itemNames = [];
+  for (const asset in playerInv) {
+    itemNames.push(asset); // Assuming item names are the same as asset keys
   }
+  return itemNames;
+}
 
-  // Update requested tags
-  if (message.content.startsWith('!request')) {
-    const tags = message.content.split(' ').slice(1);
-    config.requestTags = [...new Set([...config.requestTags, ...tags])];
-    saveConfig();
-    message.reply(`✅ Requesting: ${tags.join(', ')}. Current tags: ${config.requestTags.join(', ')}`);
-  }
-
-  // Reset config to default
-  if (message.content.startsWith('!reset')) {
-    config.manualItems = [];
-    config.requestTags = [];
-    saveConfig();
-    message.reply('✅ Reset items and tags to default.');
-  }
-});
-
+// Save configuration to file
 function saveConfig() {
   fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
 }
 
+// Function to generate trade ads
+function generateAd() {
+  let availableItems = [];
+  for (const asset in playerInv) {
+    for (const uaid of playerInv[asset]) {
+      if (!onHold.includes(uaid) && itemValues[asset].value >= config.minItemValue && config.maxItemValue >= itemValues[asset].value && !config.sendBlacklist.includes(`${asset}`)) {
+        availableItems.push(asset);
+      }
+    }
+  }
+  // Remaining ad generation logic...
+}
+
+// Discord Bot Setup
+const discordClient = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
+});
+
+discordClient.on('ready', () => {
+  console.log(`Logged in as ${discordClient.user.tag}!`);
+});
+
+discordClient.on('interactionCreate', async interaction => {
+  if (!interaction.isCommand() && !interaction.isAutocomplete()) return;
+
+  if (interaction.isCommand()) {
+    const { commandName, options } = interaction;
+
+    if (commandName === 'add') {
+      const item = options.getString('item');
+      config.manualItems = [...new Set([...config.manualItems, item])]; // Avoid duplicates
+      saveConfig();
+      await interaction.reply(`✅ Added item: ${item}. Current items: ${config.manualItems.join(', ')}`);
+    } else if (commandName === 'request') {
+      const tag = options.getString('tag');
+      config.requestTags = [...new Set([...config.requestTags, tag])];
+      saveConfig();
+      await interaction.reply(`✅ Requesting: ${tag}. Current tags: ${config.requestTags.join(', ')}`);
+    } else if (commandName === 'reset') {
+      config.manualItems = [];
+      config.requestTags = [];
+      saveConfig();
+      await interaction.reply('✅ Reset items and tags to default.');
+    } else if (commandName === 'status') {
+      const statusMessage = `
+        Player ID: ${process.env.DISCORD_USER_ID}
+        Trade Cooldown (in minutes): ${config.tradeCooldown}
+        Specific Ads Enabled: ${config.specificAdsEnabled ? 'Yes' : 'No'}
+        Allow Missing Offer Items: ${config.allowMissingOfferItems ? 'Yes' : 'No'}
+        Activity Status: ${config.activityStatus}
+        Auto Ads Enabled: ${config.autoAdsEnabled ? 'Yes' : 'No'}
+        General Trade Ad Configuration:
+        \n
+        Auto Trade Ads Configuration:
+        Roblox User: ${config.robloxUser}
+        Trade Type: ${config.tradeType}
+        User Item Type: ${config.userItemType}
+        Include On Hold: ${config.includeOnHold ? 'Yes' : 'No'}
+        Min Value: ${config.minValue}
+        Request Item Type: ${config.requestItemType}
+        Min Demand: ${config.minDemand}
+        \n
+        Specific Trade Ads Configuration:
+        Ad 1:
+          offer_item_ids: ${config.ad1.offer_item_ids.join(', ')}
+          request_item_ids: ${config.ad1.request_item_ids.join(', ')}
+          request_tags: ${config.ad1.request_tags.join(', ')}
+          offer_robux: ${config.ad1.offer_robux}
+      `;
+      await interaction.reply(statusMessage);
+    }
+  } else if (interaction.isAutocomplete()) {
+    const focusedOption = interaction.options.getFocused(true);
+    let choices = [];
+
+    if (focusedOption.name === 'item') {
+      const itemNames = await getItemNames();
+      choices = itemNames.filter(item => item.toLowerCase().includes(focusedOption.value.toLowerCase()));
+    }
+
+    await interaction.respond(
+      choices.map(choice => ({ name: choice, value: choice }))
+    );
+  }
+});
+
 discordClient.login(process.env.DISCORD_BOT_TOKEN);
 
 // Existing Rolimons Ad-Poster Code (unchanged)
-const rolimonsToken = process.env.token;
-const robloxId = process.env.robloxId;
-
-let itemValues = {};
-let playerInv = {};
-let onHold = [];
-
-async function getValues() { /* ... Keep your existing code here ... */ }
-async function getInv() { /* ... Keep your existing code here ... */ }
-function generateAd() { /* ... Keep your existing code here ... */ }
-async function postAd(sending) { /* ... Keep your existing code here ... */ }
+// ... (remaining ad-poster code here)
 
 app.get("/", (req, res) => {
   res.json({ message: 'Trade ad bot is up and running!' });
