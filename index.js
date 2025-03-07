@@ -1,101 +1,109 @@
-var app = require("express")() // Hosting the API and putting it on uptimerobot
-app.use(require("body-parser").json())
+require('dotenv').config();
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const express = require('express');
+const app = express();
+const fetch = require('node-fetch');
 
-const dotenv = require('dotenv') // Reading secrets from env
-dotenv.config()
+// Discord Client Setup
+const discordClient = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
+});
 
-const fetch = require("node-fetch");
+discordClient.login(process.env.DISCORD_TOKEN);
 
-const rolimonsToken = process.env.token // Rolimons verification token from environment
-const robloxId = process.env.robloxId // Roblox verification token from environment
-const config = require("./config.json"); // Your configuration
+// Existing Rolimons Configuration
+const rolimonsToken = process.env.token;
+const robloxId = process.env.robloxId;
+const config = require('./config.json');
 
-let itemValues = {}; // Item values. Format: "itemId": {"value": "5", "type": "3"}
-let playerInv = {}; // Player current inventory
-let onHold = []; // Items on hold
+let itemValues = {};
+let playerInv = {};
+let onHold = [];
 
-// Get item values from Rolimons
-async function getValues() {
-  await fetch(`https://api.rolimons.com/items/v1/itemdetails`, {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-  })
-  .then(res => res.json())
-  .then(json => {
-    for (const item in json.items) {
-      let type = json.items[item][5] >= 0 ? json.items[item][5] : 0;
-      itemValues[item] = { value: Math.abs(json.items[item][4]), type: type }; // Assign item values and demand
-    }
-    getInv();
-  })
-  .catch(err => console.log(err));
-}
+// Discord Command Handling
+discordClient.on('interactionCreate', async interaction => {
+  if (!interaction.isCommand()) return;
 
-// Get user inventory and see items on hold
-async function getInv() {
-  await fetch(`https://api.rolimons.com/players/v1/playerassets/${robloxId}`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent": "Mozilla/5.0",
-    },
-  })
-  .then(res => res.json())
-  .then(json => {
-    playerInv = json.playerAssets; // Get player's inventory
-    onHold = json.holds; // Assign items on hold
-    generateAd();
-  })
-  .catch(err => console.log(err));
-}
-
-// Function to decide what items to put in the ad
-function generateAd() {
-  let availableItems = [];
-  for (const asset in playerInv) {
-    for (const uaid of playerInv[asset]) {
-      if (!onHold.includes(uaid) && itemValues[asset] && itemValues[asset].value >= config.minItemValue && config.maxItemValue >= itemValues[asset].value && !config.sendBlacklist.includes(`${asset}`)) {
-        availableItems.push(asset);
+  try {
+    if (interaction.commandName === 'manage-trade') {
+      const action = interaction.options.getString('action');
+      const item = interaction.options.getString('item');
+      
+      if (interaction.options.getSubcommandGroup() === 'request') {
+        config.manualItems = processItemAction(config.manualItems, action, item);
+        await interaction.reply({ 
+          content: `${action === 'add' ? '✅ Added' : '❌ Removed'} item ${item}`,
+          ephemeral: true 
+        });
       }
     }
+
+    if (interaction.commandName === 'post-trade') {
+      generateAd();
+      await interaction.reply('Trade ad posted!');
+    }
+  } catch (error) {
+    console.error(error);
+    await interaction.reply({ 
+      content: 'Error processing command', 
+      ephemeral: true 
+    });
   }
+});
 
-  // Manually specified items
-  let sendingSide = config.manualItems;
+// Autocomplete Handler
+discordClient.on('interactionCreate', async interaction => {
+  if (!interaction.isAutocomplete()) return;
 
-  // Post the ad
-  postAd(sendingSide);
-}
+  const focused = interaction.options.getFocused(true);
+  if (focused.name === 'item') {
+    const filtered = Object.keys(itemValues)
+      .filter(item => item.includes(focused.value))
+      .slice(0, 25);
+    await interaction.respond(
+      filtered.map(item => ({ 
+        name: `Item ${item} (${itemValues[item].value})`, 
+        value: item 
+      }))
+    );
+  }
+});
 
-// Function to post the trade ad
+// Existing Rolimons Functions (keep your original getValues, getInv, generateAd, postAd)
+// Add this at the end of postAd():
 async function postAd(sending) {
-  let allRTags = config.requestTags || [];
-
-  let reqBody = {
-    "player_id": parseFloat(robloxId),
-    "offer_item_ids": sending,
-    "request_item_ids": [],
-    "request_tags": allRTags
-  };
-
-  fetch(`https://api.rolimons.com/tradeads/v1/createad`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "cookie": `${rolimonsToken}`
-    },
-    body: JSON.stringify(reqBody),
-  })
-  .then(res => res.json())
-  .then(json => console.log(json))
-  .catch(err => console.log(err));
-
-  setTimeout(() => { getValues(); }, 1560000);
+  // ... existing postAd code ...
+  
+  // Discord Notification
+  const channel = await discordClient.channels.fetch(process.env.DISCORD_CHANNEL_ID);
+  channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle('New Trade Posted')
+        .addFields(
+          { name: 'Offering', value: sending.join(', ') || 'None' },
+          { name: 'Requesting', value: config.requestTags.join(', ') }
+        )
+        .setTimestamp()
+    ]
+  });
 }
 
-getValues(); // Start the script from here
+// Helper function
+function processItemAction(array, action, item) {
+  return action === 'add' 
+    ? [...new Set([...array, item])] 
+    : array.filter(i => i !== item);
+}
 
-app.get("/", (req, res) => {
-  res.json({ message: 'Trade ad bot is up and running!' });
-})
-app.listen(8080)
+// Keep existing express and interval code
+app.use(express.json());
+app.get('/', (req, res) => res.json({ status: 'active' }));
+app.listen(8080);
+
+// Initialize
+getValues();
